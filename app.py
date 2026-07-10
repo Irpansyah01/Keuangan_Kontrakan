@@ -175,7 +175,6 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                             st.markdown(f"👤 **{dari}** ➡️ wajib transfer ke **{ke}**")
                             st.markdown(f"### Rp {jml:,.0f}")
                         with col_upl:
-                            # Komponen upload foto asli dari galeri HP
                             file_foto = st.file_uploader("Pilih/Foto Bukti TF Kamu:", type=["png", "jpg", "jpeg"], key=f"f_{id_h}")
                             if st.button("Konfirmasi Bayar Lunas", key=f"b_{id_h}", type="primary", use_container_width=True):
                                 if not file_foto:
@@ -183,7 +182,6 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                                 else:
                                     with st.spinner("Sedang memproses & mengunggah gambar..."):
                                         try:
-                                            # Proses upload otomatis ke cloud Imgbb lewat latar belakang
                                             url_api = "https://api.imgbb.com/1/upload"
                                             payload = {"key": IMGBB_API_KEY}
                                             files = {"image": file_foto.getvalue()}
@@ -191,9 +189,10 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                                             data_json = respons.json()
                                             
                                             if data_json["status"] == 200:
-                                            link_gambar_online = data_json["data"]["url"]
-                                            database.update_status(id_h, 1, link_gambar_online) # <-- GANTI JADI INI
-                                            st.success("Berhasil dilunasi!")
+                                                link_gambar_online = data_json["data"]["url"]
+                                                # DI SINI PERBAIKANNYA: Menggunakan fungsi database.update_status yang baru
+                                                database.update_status(id_h, 1, link_gambar_online)
+                                                st.success("Berhasil dilunasi!")
                                                 st.cache_data.clear()
                                                 st.rerun()
                                             else:
@@ -217,8 +216,9 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                             c_f.caption("Bukti tidak berbentuk tautan gambar")
                             
                         if c_b.button("Batalkan Pelunasan", key=f"btl_{id_h}", use_container_width=True):
-                        database.update_status(id_h, 0, "") # <-- GANTI JADI INI
-                        st.cache_data.clear()
+                            # DI SINI PERBAIKANNYA: Menggunakan fungsi database.update_status untuk batalkan pelunasan
+                            database.update_status(id_h, 0, "")
+                            st.cache_data.clear()
                             st.rerun()
 
 # ========================================================
