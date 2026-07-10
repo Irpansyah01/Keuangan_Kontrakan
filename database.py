@@ -89,39 +89,32 @@ def sinkronisasi_hutang(daftar_baru):
     conn = connect()
     cursor = conn.cursor()
     
+    # 1. Ambil data lama yang sudah terlanjur LUNAS (status = 1) agar tidak terhapus
     try:
-        cursor.execute("SELECT dari, ke, jumlah, status, foto FROM penyelesaian_hutang")
-        lama = cursor.fetchall()
-        status_dict = {(x[0], x[1], x[2]): (x[3], x[4]) for x in lama}
+        cursor.execute("SELECT dari, ke, jumlah, foto FROM penyelesaian_hutang WHERE status = 1")
+        lunas_lama = cursor.fetchall()
+        set_lunas = {(x[0], x[1], x[2]): x[3] for x in lunas_lama}
     except sqlite3.OperationalError:
-        status_dict = {}
-        
+        set_lunas = {}
+
+    # 2. Hapus tabel lama, tapi kita bangun ulang dengan memisahkan mana yang benar-benar belum bayar
     try:
         cursor.execute("DELETE FROM penyelesaian_hutang")
+        
         for t in daftar_baru:
             kunci = (t["dari"], t["ke"], t["jumlah"])
-            status_aktif, foto_aktif = status_dict.get(kunci, (0, ""))
-            cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
-                           (t["dari"], t["ke"], t["jumlah"], status_aktif, foto_aktif))
-    except sqlite3.OperationalError:
-        # Jika database di server macet/menolak akibat struktur kolom usang, reset otomatis tabel penampung ini
-        cursor.execute("DROP TABLE IF EXISTS penyelesaian_hutang")
-        cursor.execute('''
-            CREATE TABLE penyelesaian_hutang (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dari TEXT,
-                ke TEXT,
-                jumlah INTEGER,
-                status INTEGER DEFAULT 0,
-                foto TEXT DEFAULT ''
-            )
-        ''')
-        for t in daftar_baru:
-            cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
-                           (t["dari"], t["ke"], t["jumlah"], 0, ""))
             
+            # Jika transaksi ini di memori database ternyata SUDAH LUNAS, pertahankan status lunasnya!
+            if kunci in set_lunas:
+                cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
+                               (t["dari"], t["ke"], t["jumlah"], 1, set_lunas[kunci]))
+            else:
+                cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
+                               (t["dari"], t["ke"], t["jumlah"], 0, ""))
+    except sqlite3.OperationalError:
+        pass
+        
     conn.commit()
     conn.close()
-
 # Jalankan pemeriksaan awal
 create_table()
