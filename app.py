@@ -4,8 +4,14 @@ from datetime import datetime
 import sqlite3
 import database
 import io
+import requests  # Library untuk menembak gambar ke internet
 
 st.set_page_config(page_title="Keuangan Kontrakan", layout="wide")
+
+# ========================================================
+# 🔑 PASTE API KEY IMGBB KAMU DI BAWAH INI
+# ========================================================
+IMGBB_API_KEY = "eb4f96bc96d6410343d2fa213b2c0baa"
 
 st.title("🏠 Aplikasi Keuangan Kontrakan")
 st.write("Kelola keuangan bersama penghuni kontrakan secara praktis dan adil.")
@@ -108,10 +114,11 @@ elif st.session_state["menu_aktif"] == "TAMBAH":
                 st.rerun()
 
 # ========================================================
-# HALAMAN 3: PENYELESAIAN PEMBAYARAN PERMINGGU (FIXED & ANTI-GAGAL)
+# HALAMAN 3: PENYELESAIAN PEMBAYARAN (UPLOAD LANGSUNG HP)
 # ========================================================
 elif st.session_state["menu_aktif"] == "HUTANG":
-    st.header("💸 Penyelesaian Hutang Mingguan (Berdasarkan Ceklis)")
+    st.header("💸 Penyelesaian Hutang Mingguan")
+    
     if df.empty:
         st.info("Hutang piutang kosong.")
     else:
@@ -163,43 +170,56 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                 if status == 0:
                     ada_belum = True
                     with st.container(border=True):
-                        col_txt, col_upl = st.columns([4, 3])
+                        col_txt, col_upl = st.columns([4, 4])
                         with col_txt:
                             st.markdown(f"👤 **{dari}** ➡️ wajib transfer ke **{ke}**")
                             st.markdown(f"### Rp {jml:,.0f}")
                         with col_upl:
-                            # DIUBAH JADI INPUT TEKS/LINK AGAR 100% AMAN DI SERVER LIVE ONLINE
-                            input_bukti = st.text_input("Link Foto Bukti TF (Opsional, Boleh Kosong):", placeholder="Contoh: link Gdrive atau ketik 'LUNAS'", key=f"t_{id_h}")
-                            if st.button("Konfirmasi Bayar Lunas", key=f"b_{id_h}", type="primary"):
-                                database.update_status_hutang(id_h, 1, input_bukti if input_bukti.strip() != "" else "Lunas (Tanpa Link)")
-                                st.success("Status lunas dikonfirmasi!")
-                                st.cache_data.clear()
-                                st.rerun()
+                            # Komponen upload foto asli dari galeri HP
+                            file_foto = st.file_uploader("Pilih/Foto Bukti TF Kamu:", type=["png", "jpg", "jpeg"], key=f"f_{id_h}")
+                            if st.button("Konfirmasi Bayar Lunas", key=f"b_{id_h}", type="primary", use_container_width=True):
+                                if not file_foto:
+                                    st.error("Silakan lampirkan foto bukti transfer terlebih dahulu!")
+                                else:
+                                    with st.spinner("Sedang memproses & mengunggah gambar..."):
+                                        try:
+                                            # Proses upload otomatis ke cloud Imgbb lewat latar belakang
+                                            url_api = "https://api.imgbb.com/1/upload"
+                                            payload = {"key": IMGBB_API_KEY}
+                                            files = {"image": file_foto.getvalue()}
+                                            respons = requests.post(url_api, data=payload, files=files)
+                                            data_json = respons.json()
+                                            
+                                            if data_json["status"] == 200:
+                                                link_gambar_online = data_json["data"]["url"]
+                                                database.update_status_hutang(id_h, 1, link_gambar_online)
+                                                st.success("Berhasil dilunasi!")
+                                                st.cache_data.clear()
+                                                st.rerun()
+                                            else:
+                                                st.error("Gagal mengunggah ke cloud. Periksa API Key Imgbb kamu.")
+                                        except Exception as e:
+                                            st.error(f"Terjadi gangguan koneksi: {e}")
             if not ada_belum:
                 st.success("🎉 Luar biasa! Semua iuran minggu ini sudah impas lunas.")
 
         with tab2:
-            ada_lunas = False
             for item in data_hutang:
                 id_h, dari, ke, jml, status, foto = item
                 if status == 1:
-                    ada_lunas = True
                     with st.container(border=True):
-                        c_t, c_f, c_b = st.columns([3, 2, 2])
+                        c_t, c_f, c_b = st.columns([3, 2.5, 2.5])
                         c_t.markdown(f"~~**{dari}** ke **{ke}**~~ (Lunas)\n### Rp {jml:,.0f}")
                         
-                        # Menampilkan catatan atau link gdrive yang diinput tadi
-                        if foto:
-                            c_f.markdown(f"ℹ️ **Keterangan Bukti:**\n`{foto}`")
+                        if foto and foto.startswith("http"):
+                            c_f.link_button("👁️ Lihat Foto Bukti TF", foto, type="secondary", use_container_width=True)
                         else:
-                            c_f.caption("Tidak ada catatan bukti")
+                            c_f.caption("Bukti tidak berbentuk tautan gambar")
                             
-                        if c_b.button("Batalkan Pelunasan", key=f"btl_{id_h}"):
+                        if c_b.button("Batalkan Pelunasan", key=f"btl_{id_h}", use_container_width=True):
                             database.update_status_hutang(id_h, 0, None)
                             st.cache_data.clear()
                             st.rerun()
-            if not ada_lunas:
-                st.info("Belum ada transaksi iuran yang diselesaikan.")
 
 # ========================================================
 # HALAMAN 4: RIWAYAT, HAPUS DATA & EXCEL
@@ -229,7 +249,6 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
         st.divider()
 
         st.subheader("📝 Semua Riwayat Nota Masuk")
-        st.write("Jika ada data yang salah input, catat nomor **ID**-nya lalu masukkan ke kolom hapus di bawah.")
         st.dataframe(df_riwayat[["id", "tanggal", "barang", "nominal", "dibayar_oleh"]], use_container_width=True, hide_index=True)
         
         st.divider()
@@ -242,4 +261,3 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
             st.success(f"Nota dengan ID {id_target} berhasil dihapus!")
             st.cache_data.clear()
             st.rerun()
-            
