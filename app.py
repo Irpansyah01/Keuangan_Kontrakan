@@ -12,7 +12,7 @@ st.write("Kelola keuangan bersama penghuni kontrakan secara praktis dan adil.")
 st.divider()
 
 # ========================================================
-# SISTEM NAVIGASI 4 BUTTON BESAR
+# NAVIGASI BUTTON BESAR
 # ========================================================
 if "menu_aktif" not in st.session_state:
     st.session_state["menu_aktif"] = "RINGKASAN"
@@ -42,11 +42,13 @@ with c_btn4:
 st.write("")
 st.divider()
 
-# Hubungkan ke database
-with sqlite3.connect(database.DB_PATH) as conn:
-    df = pd.read_sql_query("SELECT * FROM pengeluaran", conn)
+# Ambil data pengeluaran dari DB
+@st.cache_data(ttl=1)
+def load_data_cepat():
+    with sqlite3.connect(database.DB_PATH) as conn:
+        return pd.read_sql_query("SELECT * FROM pengeluaran", conn)
 
-# Daftar semua anak kontrakan tetap
+df = load_data_cepat()
 SEMUA_ANGGOTA = ["Irpan", "Azril", "Maulana", "Angga"]
 
 # ========================================================
@@ -70,7 +72,7 @@ if st.session_state["menu_aktif"] == "RINGKASAN":
         st.bar_chart(ringkasan_orang)
 
 # ========================================================
-# HALAMAN 2: FORMULIR TAMBAH PENGELUARAN (UPDATE FITUR CEKLIS)
+# HALAMAN 2: FORMULIR TAMBAH PENGELUARAN
 # ========================================================
 elif st.session_state["menu_aktif"] == "TAMBAH":
     st.header("📝 Formulir Input Nota Belanja Baru")
@@ -81,41 +83,37 @@ elif st.session_state["menu_aktif"] == "TAMBAH":
         with col_nama:
             dibayar_oleh = st.selectbox("Siapa yang membayar duluan?:", SEMUA_ANGGOTA)
             
-        barang = st.text_input("Nama Barang / Keperluan Kontrakan:", placeholder="Contoh: Beli Galon, Token Listrik, Patungan Makan")
+        barang = st.text_input("Nama Barang / Keperluan Kontrakan:", placeholder="Contoh: Beli Galon, Token Listrik")
         nominal = st.number_input("Nominal / Harga Barang (Rp):", min_value=0, step=1000)
         
-        # --- FITUR SOLUSI BARU: CEKLIS PENGGUNA ---
-        st.markdown("⚠️ **Siapa saja yang ikut iuran/menikmati fasilitas ini?** (Uncheck yang tidak ikut)")
+        st.markdown("⚠️ **Siapa saja yang ikut iuran/menikmati fasilitas ini?**")
         col_cb = st.columns(4)
         siapa_ikut = []
         for idx, anggota in enumerate(SEMUA_ANGGOTA):
             with col_cb[idx]:
-                # Secara default ter-ceklis semua (True)
                 if st.checkbox(anggota, value=True, key=f"cb_{anggota}"):
                     siapa_ikut.append(anggota)
         
         simpan = st.form_submit_button("💾 Simpan ke Dalam Sistem")
         if simpan:
             if barang.strip() == "" or nominal <= 0:
-                st.error("Gagal simpan! Isian nama barang wajib diisi dan nominal harus lebih besar dari Rp 0.")
+                st.error("Gagal simpan! Isian nama barang wajib diisi.")
             elif len(siapa_ikut) == 0:
-                st.error("Gagal simpan! Minimal harus ada 1 orang yang diceklis sebagai penanggung beban iuran.")
+                st.error("Gagal simpan! Minimal harus ada 1 orang yang diceklis.")
             else:
-                # Trik pintar: Menyimpan daftar orang yang ikut dalam format teks dipisah koma, contoh: "Irpan,Azril"
                 konsumen_txt = ",".join(siapa_ikut)
-                
-                # Kita akali masukkan data orang yang ikut ke tabel dengan format khusus di nama barang, atau modifikasi query
                 database.tambah_pengeluaran(str(tanggal), f"{barang} | Ikut: {konsumen_txt}", nominal, dibayar_oleh)
-                st.success(f"Berhasil! Nota '{barang}' sukses dicatat. Dibagi adil untuk: {', '.join(siapa_ikut)}")
+                st.success(f"Berhasil dicatat!")
+                st.cache_data.clear()
                 st.rerun()
 
 # ========================================================
-# HALAMAN 3: PENYELESAIAN PEMBAYARAN PERMINGGU (LOGIKA BARU)
+# HALAMAN 3: PENYELESAIAN PEMBAYARAN PERMINGGU (FIXED & ANTI-GAGAL)
 # ========================================================
 elif st.session_state["menu_aktif"] == "HUTANG":
     st.header("💸 Penyelesaian Hutang Mingguan (Berdasarkan Ceklis)")
     if df.empty:
-        st.info("Hutang piutang kosong karena belum ada transaksi belanja yang terdata.")
+        st.info("Hutang piutang kosong.")
     else:
         saldo_semua = {nama: 0 for nama in SEMUA_ANGGOTA}
 
@@ -124,23 +122,17 @@ elif st.session_state["menu_aktif"] == "HUTANG":
             nominal_nota = row["nominal"]
             pembayar_nota = row["dibayar_oleh"]
             
-            # Memisahkan nama barang asli dengan daftar orang yang diceklis tadi
             if " | Ikut: " in nama_barang_mentah:
                 barang_asli, konsumen_part = nama_barang_mentah.split(" | Ikut: ")
                 peserta_nota = konsumen_part.split(",")
             else:
-                # Jaga-jaga jika ada data lama yang belum pakai sistem ceklis
-                peserta_nota = ["Irpan", "Azril", "Maulana", "Angga"]
+                peserta_nota = SEMUA_ANGGOTA
             
-            # Hitung pembagian hanya untuk orang yang ikut menikmati
             beban_per_orang = nominal_nota / len(peserta_nota)
-            
-            # Kurangi saldo orang-orang yang ada di dalam ceklis nota tersebut
             for p in peserta_nota:
                 if p in saldo_semua:
                     saldo_semua[p] -= beban_per_orang
                     
-            # Tambahkan nominal penuh ke orang yang nalangin di awal
             if pembayar_nota in saldo_semua:
                 saldo_semua[pembayar_nota] += nominal_nota
 
@@ -176,33 +168,38 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                             st.markdown(f"👤 **{dari}** ➡️ wajib transfer ke **{ke}**")
                             st.markdown(f"### Rp {jml:,.0f}")
                         with col_upl:
-                            file_foto = st.file_uploader("Upload Foto Bukti TF", type=["png", "jpg", "jpeg"], key=f"f_{id_h}")
-                            if st.button("Konfirmasi Bayar Lunas", key=f"b_{id_h}"):
-                                nama_file_simpan = None
-                                if file_foto:
-                                    nama_file_simpan = f"bukti_{id_h}_{file_foto.name}"
-                                    with open(os.path.join(database.BUKTI_DIR, nama_file_simpan), "wb") as f:
-                                        f.write(file_foto.getbuffer())
-                                database.update_status_hutang(id_h, 1, nama_file_simpan)
+                            # DIUBAH JADI INPUT TEKS/LINK AGAR 100% AMAN DI SERVER LIVE ONLINE
+                            input_bukti = st.text_input("Link Foto Bukti TF (Opsional, Boleh Kosong):", placeholder="Contoh: link Gdrive atau ketik 'LUNAS'", key=f"t_{id_h}")
+                            if st.button("Konfirmasi Bayar Lunas", key=f"b_{id_h}", type="primary"):
+                                database.update_status_hutang(id_h, 1, input_bukti if input_bukti.strip() != "" else "Lunas (Tanpa Link)")
                                 st.success("Status lunas dikonfirmasi!")
+                                st.cache_data.clear()
                                 st.rerun()
             if not ada_belum:
                 st.success("🎉 Luar biasa! Semua iuran minggu ini sudah impas lunas.")
 
         with tab2:
+            ada_lunas = False
             for item in data_hutang:
                 id_h, dari, ke, jml, status, foto = item
                 if status == 1:
+                    ada_lunas = True
                     with st.container(border=True):
                         c_t, c_f, c_b = st.columns([3, 2, 2])
                         c_t.markdown(f"~~**{dari}** ke **{ke}**~~ (Lunas)\n### Rp {jml:,.0f}")
+                        
+                        # Menampilkan catatan atau link gdrive yang diinput tadi
                         if foto:
-                            jalur_foto = os.path.join(database.BUKTI_DIR, foto)
-                            if os.path.exists(jalur_foto):
-                                c_f.image(jalur_foto, width=150, caption="Foto Bukti Transfer")
+                            c_f.markdown(f"ℹ️ **Keterangan Bukti:**\n`{foto}`")
+                        else:
+                            c_f.caption("Tidak ada catatan bukti")
+                            
                         if c_b.button("Batalkan Pelunasan", key=f"btl_{id_h}"):
                             database.update_status_hutang(id_h, 0, None)
+                            st.cache_data.clear()
                             st.rerun()
+            if not ada_lunas:
+                st.info("Belum ada transaksi iuran yang diselesaikan.")
 
 # ========================================================
 # HALAMAN 4: RIWAYAT, HAPUS DATA & EXCEL
@@ -212,9 +209,8 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
     
     data_mentah = database.ambil_semua_data()
     if not data_mentah:
-        st.info("Belum ada riwayat transaksi belanja yang tersimpan.")
+        st.info("Belum ada riwayat transaksi.")
     else:
-        # Bersihkan tampilan nama barang dari teks sistem iuran saat diexport
         clean_rows = []
         for r in data_mentah:
             id_r, tgl, brg, nom, oleh = r
@@ -225,54 +221,25 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
         df_riwayat["tanggal_dt"] = pd.to_datetime(df_riwayat["tanggal"])
         df_riwayat["bulan_tahun"] = df_riwayat["tanggal_dt"].dt.strftime("%Y-%m")
         
-        def rumus_minggu(dt):
-            return (dt.day - 1) // 7 + 1
-        df_riwayat["minggu_ke"] = df_riwayat["tanggal_dt"].apply(rumus_minggu)
-        
-        st.subheader("📥 Ekspor Laporan Kas Kontrakan")
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
             df_riwayat[["tanggal", "barang", "nominal", "dibayar_oleh"]].to_excel(writer, sheet_name='Data_Kas', index=False)
         
-        st.download_button(
-            label="🟢 Download Seluruh Laporan (.xlsx / Excel)",
-            data=buffer.getvalue(),
-            file_name="Laporan_Keuangan_Kontrakan.xlsx",
-            mime="application/vnd.ms-excel"
-        )
+        st.download_button(label="🟢 Download Excel (.xlsx)", data=buffer.getvalue(), file_name="Laporan_Kas.xlsx", mime="application/vnd.ms-excel")
         st.divider()
 
-        st.subheader("🔍 Filter Berdasarkan Minggu & Bulan")
-        list_bulan = sorted(df_riwayat["bulan_tahun"].unique(), reverse=True)
-        bulan_pilihan = st.selectbox("Pilih Bulan Akuntansi:", list_bulan)
+        st.subheader("📝 Semua Riwayat Nota Masuk")
+        st.write("Jika ada data yang salah input, catat nomor **ID**-nya lalu masukkan ke kolom hapus di bawah.")
+        st.dataframe(df_riwayat[["id", "tanggal", "barang", "nominal", "dibayar_oleh"]], use_container_width=True, hide_index=True)
         
-        df_bulan_filter = df_riwayat[df_riwayat["bulan_tahun"] == bulan_pilihan].sort_values(by="tanggal_dt", ascending=False)
-        total_bulan = df_bulan_filter["nominal"].sum()
-        st.markdown(f"### Total Belanja Bulan ini: **Rp {total_bulan:,.0f}**")
-
-        for m in range(1, 6):
-            df_minggu = df_bulan_filter[df_riwayat["minggu_ke"] == m]
-            if not df_minggu.empty:
-                total_m = df_minggu["nominal"].sum()
-                with st.expander(f"📅 Minggu ke-{m} | Total Belanja: Rp {total_m:,.0f}"):
-                    
-                    st.markdown("---")
-                    c_h1, c_h2, c_h3, c_h4, c_h5 = st.columns([2, 3, 2, 2, 1.5])
-                    c_h1.markdown("**Tanggal**")
-                    c_h2.markdown("**Nama Barang**")
-                    c_h3.markdown("**Nominal**")
-                    c_h4.markdown("**Dibayar Oleh**")
-                    c_h5.markdown("**Aksi**")
-                    st.markdown("---")
-                    
-                    for idx, baris in df_minggu.iterrows():
-                        col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns([2, 3, 2, 2, 1.5])
-                        col_r1.write(baris["tanggal"])
-                        col_r2.write(baris["barang"])
-                        col_r3.write(f"Rp {baris['nominal']:,.0f}")
-                        col_r4.write(baris["dibayar_oleh"])
-                        
-                        if col_r5.button("🗑️ Hapus", key=f"del_{baris['id']}", type="primary"):
-                            database.hapus_pengeluaran(baris["id"])
-                            st.success("Data berhasil dihapus!")
-                            st.rerun()
+        st.divider()
+        st.subheader("🗑️ Zona Hapus Data Salah Input")
+        id_target = st.number_input("Masukkan ID Angka Nota yang mau dihapus:", min_value=0, step=1)
+        tombol_hapus = st.button("❌ Hapus Permanen Nota Ini", type="primary")
+        
+        if tombol_hapus and id_target > 0:
+            database.hapus_pengeluaran(id_target)
+            st.success(f"Nota dengan ID {id_target} berhasil dihapus!")
+            st.cache_data.clear()
+            st.rerun()
+            
