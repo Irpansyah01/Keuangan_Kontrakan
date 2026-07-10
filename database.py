@@ -2,7 +2,7 @@ import pandas as pd
 import requests
 
 # GANTI INI DENGAN ID GOOGLE SHEETS KAMU
-SHEET_ID = "MASUKKAN_ID_SPREADSHEET_MU_DISINI"
+SHEET_ID = "https://docs.google.com/spreadsheets/d/1fZQV2nkD1PHO60zTwGSZFL9p3CWQnIxVoTOTIHxBL4o/edit?usp=sharing"
 URL_BACA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Sheet1"
 
 # Menggunakan Google Form / Web App sederhana untuk simpan data
