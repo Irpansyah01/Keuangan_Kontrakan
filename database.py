@@ -22,6 +22,7 @@ def create_table():
                 dibayar_oleh TEXT
             )
         ''')
+        
         # 2. Pastikan tabel penyelesaian_hutang punya struktur kolom yang konsisten
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS penyelesaian_hutang (
@@ -30,13 +31,13 @@ def create_table():
                 ke TEXT,
                 jumlah INTEGER,
                 status INTEGER DEFAULT 0,
-                foto TEXT
+                foto TEXT DEFAULT ''
             )
         ''')
         
-        # Jembatan pengaman jika database lama belum memiliki kolom foto
+        # Jembatan pengaman otomatis jika database lama kehilangan kolom foto
         try:
-            cursor.execute("ALTER TABLE penyelesaian_hutang ADD COLUMN foto TEXT")
+            cursor.execute("ALTER TABLE penyelesaian_hutang ADD COLUMN foto TEXT DEFAULT ''")
         except sqlite3.OperationalError:
             pass
         conn.commit()
@@ -72,18 +73,18 @@ def ambil_penyelesaian():
     conn.close()
     return data
 
-# FUNGSI UPDATE STATUS YANG SUDAH DISINKRONKAN NAMA KOLOMNYA
+# FIX: Menggunakan 'is not None' agar string kosong ("") untuk hapus foto saat batal lunas tetap diproses
 def update_status(id_transaksi, status, link_foto=None):
     conn = connect()
     cursor = conn.cursor()
-    if link_foto:
+    if link_foto is not None:
         cursor.execute("UPDATE penyelesaian_hutang SET status=?, foto=? WHERE id=?", (status, link_foto, id_transaksi))
     else:
         cursor.execute("UPDATE penyelesaian_hutang SET status=? WHERE id=?", (status, id_transaksi))
     conn.commit()
     conn.close()
 
-# FUNGSI SINKRONISASI YANG SUDAH DI-FIX (MENGGUNAKAN NAMA KOLOM DARI, KE, JUMALH, STATUS, FOTO)
+# FIX: Ditambahkan penanganan drop table otomatis jika struktur database bawaan server terlanjur rusak parah
 def sinkronisasi_hutang(daftar_baru):
     conn = connect()
     cursor = conn.cursor()
@@ -95,15 +96,32 @@ def sinkronisasi_hutang(daftar_baru):
     except sqlite3.OperationalError:
         status_dict = {}
         
-    cursor.execute("DELETE FROM penyelesaian_hutang")
-    
-    for t in daftar_baru:
-        kunci = (t["dari"], t["ke"], t["jumlah"])
-        status_aktif, foto_aktif = status_dict.get(kunci, (0, None))
-        cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
-                       (t["dari"], t["ke"], t["jumlah"], status_aktif, foto_aktif))
+    try:
+        cursor.execute("DELETE FROM penyelesaian_hutang")
+        for t in daftar_baru:
+            kunci = (t["dari"], t["ke"], t["jumlah"])
+            status_aktif, foto_aktif = status_dict.get(kunci, (0, ""))
+            cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
+                           (t["dari"], t["ke"], t["jumlah"], status_aktif, foto_aktif))
+    except sqlite3.OperationalError:
+        # Jika database di server macet/menolak akibat struktur kolom usang, reset otomatis tabel penampung ini
+        cursor.execute("DROP TABLE IF EXISTS penyelesaian_hutang")
+        cursor.execute('''
+            CREATE TABLE penyelesaian_hutang (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dari TEXT,
+                ke TEXT,
+                jumlah INTEGER,
+                status INTEGER DEFAULT 0,
+                foto TEXT DEFAULT ''
+            )
+        ''')
+        for t in daftar_baru:
+            cursor.execute("INSERT INTO penyelesaian_hutang (dari, ke, jumlah, status, foto) VALUES (?, ?, ?, ?, ?)",
+                           (t["dari"], t["ke"], t["jumlah"], 0, ""))
+            
     conn.commit()
     conn.close()
 
-# Jalankan pembuatan/pemeriksaan tabel saat file ini diimpor
+# Jalankan pemeriksaan awal
 create_table()
