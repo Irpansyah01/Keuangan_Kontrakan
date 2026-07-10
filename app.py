@@ -11,7 +11,7 @@ st.set_page_config(page_title="Keuangan Kontrakan", layout="wide")
 # ========================================================
 # 🔑 PASTE API KEY IMGBB KAMU DI BAWAH INI
 # ========================================================
-IMGBB_API_KEY = "8d170575781c6eb6268f8596aa4da071"
+IMGBB_API_KEY = "eb4f96bc96d6410343d2fa213b2c0baa"
 
 st.title("🏠 Aplikasi Keuangan Kontrakan")
 st.write("Kelola keuangan bersama penghuni kontrakan secara praktis dan adil.")
@@ -188,9 +188,9 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                                             respons = requests.post(url_api, data=payload, files=files)
                                             data_json = respons.json()
                                             
+                                            # PERBAIKAN INDENTASI DI SINI (Diberi spasi masuk agar terbaca Python)
                                             if data_json["status"] == 200:
                                                 link_gambar_online = data_json["data"]["url"]
-                                                # DI SINI PERBAIKANNYA: Menggunakan fungsi database.update_status yang baru
                                                 database.update_status(id_h, 1, link_gambar_online)
                                                 st.success("Berhasil dilunasi!")
                                                 st.cache_data.clear()
@@ -216,7 +216,6 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                             c_f.caption("Bukti tidak berbentuk tautan gambar")
                             
                         if c_b.button("Batalkan Pelunasan", key=f"btl_{id_h}", use_container_width=True):
-                            # DI SINI PERBAIKANNYA: Menggunakan fungsi database.update_status untuk batalkan pelunasan
                             database.update_status(id_h, 0, "")
                             st.cache_data.clear()
                             st.rerun()
