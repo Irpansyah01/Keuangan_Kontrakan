@@ -133,7 +133,7 @@ elif st.session_state["menu_aktif"] == "HUTANG":
         database.sinkronisasi_hutang(transaksi_kalkulasi)
         data_hutang = database.ambil_penyelesaian()
 
-        # SISTEM HANYA BISA LIHAT PADA HARI SENIN-SABTU, HARI MINGGU AKTIF TOMBOLNYA
+        # JIKA BUKAN HARI MINGGU (SISTEM KUNCI / HANYA LIHAT DATA)
         if hari_ini != 6:  # 6 = Hari Minggu
             st.warning("⚠️ Pembayaran hanya dibuka setiap hari **Minggu**. Hutang belum lunas minggu lalu akan otomatis diakumulasikan ke minggu depan.")
             
@@ -143,6 +143,7 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                 if status == 0:
                     st.markdown(f"❌ **{dari}** belum bayar ke **{ke}** sebesar **Rp {jml:,.0f}**")
         else:
+            # JIKA HARI MINGGU (TOMBOL AKTIF)
             tab1, tab2 = st.tabs(["⏳ Belum Dibayar", "✅ Sudah Dilunasi"])
             
             with tab1:
@@ -182,7 +183,6 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
     if not data_mentah:
         st.info("Belum ada riwayat transaksi.")
     else:
-        # PENGAMAN: Mencegah error split jika ada teks barang yang tidak pakai format ' | Ikut: '
         clean_rows = []
         for r in data_mentah:
             id_r, tgl, brg, nom, oleh = r
