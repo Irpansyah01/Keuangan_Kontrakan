@@ -191,9 +191,9 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                                             data_json = respons.json()
                                             
                                             if data_json["status"] == 200:
-                                                link_gambar_online = data_json["data"]["url"]
-                                                database.update_status_hutang(id_h, 1, link_gambar_online)
-                                                st.success("Berhasil dilunasi!")
+                                            link_gambar_online = data_json["data"]["url"]
+                                            database.update_status(id_h, 1, link_gambar_online) # <-- GANTI JADI INI
+                                            st.success("Berhasil dilunasi!")
                                                 st.cache_data.clear()
                                                 st.rerun()
                                             else:
@@ -217,8 +217,8 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                             c_f.caption("Bukti tidak berbentuk tautan gambar")
                             
                         if c_b.button("Batalkan Pelunasan", key=f"btl_{id_h}", use_container_width=True):
-                            database.update_status_hutang(id_h, 0, None)
-                            st.cache_data.clear()
+                        database.update_status(id_h, 0, "") # <-- GANTI JADI INI
+                        st.cache_data.clear()
                             st.rerun()
 
 # ========================================================
