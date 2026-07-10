@@ -2,15 +2,17 @@ import sqlite3
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "data", "kontrakan.db")
+# MENGGANTI NAMA FILE JADI KONTRAKAN_FINAL AGAR DATABASE YANG RUSAK/KORUP TERBUANG
+DB_PATH = os.path.join(BASE_DIR, "data", "kontrakan_final.db")
 
 os.makedirs(os.path.join(BASE_DIR, "data"), exist_ok=True)
 
 def connect():
-    return sqlite3.connect(DB_PATH)
+    # check_same_thread=False wajib di Streamlit agar database tidak bentrok antar-user/halaman
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 def create_table():
-    with sqlite3.connect(DB_PATH) as conn:
+    with connect() as conn:
         cursor = conn.cursor()
         # 1. Tabel pengeluaran
         cursor.execute('''
@@ -22,7 +24,7 @@ def create_table():
                 dibayar_oleh TEXT
             )
         ''')
-        # 2. Tabel penyelesaian (Tanpa kolom foto agar enteng)
+        # 2. Tabel penyelesaian
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS penyelesaian_hutang (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +78,6 @@ def sinkronisasi_hutang(daftar_baru):
     conn = connect()
     cursor = conn.cursor()
     
-    # Ambil riwayat yang sudah lunas sebelumnya agar tidak ter-reset
     try:
         cursor.execute("SELECT dari, ke, jumlah FROM penyelesaian_hutang WHERE status = 1")
         lunas_lama = cursor.fetchall()
