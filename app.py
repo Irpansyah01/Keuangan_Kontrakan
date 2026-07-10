@@ -41,8 +41,11 @@ st.divider()
 
 @st.cache_data(ttl=1)
 def load_data_cepat():
-    with sqlite3.connect(database.DB_PATH) as conn:
-        return pd.read_sql_query("SELECT * FROM pengeluaran", conn)
+    try:
+        with database.connect() as conn:
+            return pd.read_sql_query("SELECT * FROM pengeluaran ORDER BY tanggal DESC", conn)
+    except Exception:
+        return pd.DataFrame(columns=["id", "tanggal", "barang", "nominal", "dibayar_oleh"])
 
 df = load_data_cepat()
 SEMUA_ANGGOTA = ["Irpan", "Azril", "Maulana", "Angga"]
@@ -85,7 +88,7 @@ elif st.session_state["menu_aktif"] == "TAMBAH":
                 st.cache_data.clear()
                 st.rerun()
 
-# HALAMAN 3: PEMBAYARAN MINGGUAN (KUNCI HARI MINGGU)
+# HALAMAN 3: PEMBAYARAN MINGGUAN
 elif st.session_state["menu_aktif"] == "HUTANG":
     st.header("💸 Penyelesaian Pembayaran")
     st.info(f"Hari ini: **{nama_hari}**")
@@ -93,10 +96,9 @@ elif st.session_state["menu_aktif"] == "HUTANG":
     if df.empty:
         st.info("Belum ada transaksi sama sekali.")
     else:
-        # Kalkulasi Saldo Hutang Piutang Berjalan (Akumulatif otomatis)
         saldo_semua = {nama: 0 for nama in SEMUA_ANGGOTA}
         for _, row in df.iterrows():
-            nama_barang_mentah = row["barang"]
+            nama_barang_mentah = str(row["barang"])
             nominal_nota = row["nominal"]
             pembayar_nota = row["dibayar_oleh"]
             
@@ -131,18 +133,16 @@ elif st.session_state["menu_aktif"] == "HUTANG":
         database.sinkronisasi_hutang(transaksi_kalkulasi)
         data_hutang = database.ambil_penyelesaian()
 
-        # JIKA BUKAN HARI MINGGU, SISTEM SIFATNYA HANYA VIEW (TIDAK BISA KONFIRMASI)
-        if hari_ini != 6:  # 6 artinya hari Minggu
+        # SISTEM HANYA BISA LIHAT PADA HARI SENIN-SABTU, HARI MINGGU AKTIF TOMBOLNYA
+        if hari_ini != 6:  # 6 = Hari Minggu
             st.warning("⚠️ Pembayaran hanya dibuka setiap hari **Minggu**. Hutang belum lunas minggu lalu akan otomatis diakumulasikan ke minggu depan.")
             
-            # Tampilkan list hutang berjalan saat ini
             st.subheader("📋 Catatan Hutang Berjalan Saat Ini:")
             for item in data_hutang:
                 _, dari, ke, jml, status = item
                 if status == 0:
                     st.markdown(f"❌ **{dari}** belum bayar ke **{ke}** sebesar **Rp {jml:,.0f}**")
         else:
-            # JIKA HARI MINGGU, TOMBOL PELUNASAN AKTIF
             tab1, tab2 = st.tabs(["⏳ Belum Dibayar", "✅ Sudah Dilunasi"])
             
             with tab1:
@@ -155,7 +155,6 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                             col_txt, col_btn = st.columns([6, 2])
                             col_txt.markdown(f"👤 **{dari}** ➡️ wajib transfer ke **{ke}** \n### Rp {jml:,.0f}")
                             
-                            # KLIK LANGSUNG LUNAS TANPA FOTO
                             if col_btn.button("✅ Konfirmasi Lunas", key=f"lns_{id_h}", type="primary", use_container_width=True):
                                 database.update_status(id_h, 1)
                                 st.success("Berhasil dikonfirmasi lunas!")
@@ -178,12 +177,19 @@ elif st.session_state["menu_aktif"] == "HUTANG":
 
 # HALAMAN 4: RIWAYAT
 elif st.session_state["menu_aktif"] == "RIWAYAT":
-    st.header("📋 Laporan")
+    st.header("📋 Laporan Riwayat Transaksi")
     data_mentah = database.ambil_semua_data()
     if not data_mentah:
-        st.info("Belum ada riwayat.")
+        st.info("Belum ada riwayat transaksi.")
     else:
-        clean_rows = [[r[0], r[1], r[2].split(" | Ikut: ")[0], r[3], r[4]] for r in data_mentah]
+        # PENGAMAN: Mencegah error split jika ada teks barang yang tidak pakai format ' | Ikut: '
+        clean_rows = []
+        for r in data_mentah:
+            id_r, tgl, brg, nom, oleh = r
+            brg_str = str(brg)
+            brg_bersih = brg_str.split(" | Ikut: ")[0] if " | Ikut: " in brg_str else brg_str
+            clean_rows.append([id_r, tgl, brg_bersih, nom, oleh])
+            
         df_riwayat = pd.DataFrame(clean_rows, columns=["id", "tanggal", "barang", "nominal", "dibayar_oleh"])
         
         buffer = io.BytesIO()
@@ -195,9 +201,10 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
         st.dataframe(df_riwayat, use_container_width=True, hide_index=True)
         
         st.divider()
+        st.subheader("🗑️ Hapus Data Salah Input")
         id_target = st.number_input("Masukkan ID Nota untuk dihapus:", min_value=0, step=1)
         if st.button("❌ Hapus Permanen", type="primary") and id_target > 0:
             database.hapus_pengeluaran(id_target)
-            st.success("Data berhasil dihapus!")
+            st.success(f"Data ID {id_target} berhasil dihapus!")
             st.cache_data.clear()
             st.rerun()
