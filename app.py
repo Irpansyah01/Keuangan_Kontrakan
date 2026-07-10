@@ -11,7 +11,7 @@ st.set_page_config(page_title="Keuangan Kontrakan", layout="wide")
 # ========================================================
 # 🔑 PASTE API KEY IMGBB KAMU DI BAWAH INI
 # ========================================================
-IMGBB_API_KEY = "eb4f96bc96d6410343d2fa213b2c0baa"
+IMGBB_API_KEY = "8d170575781c6eb6268f8596aa4da071"
 
 st.title("🏠 Aplikasi Keuangan Kontrakan")
 st.write("Kelola keuangan bersama penghuni kontrakan secara praktis dan adil.")
