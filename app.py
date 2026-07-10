@@ -170,35 +170,38 @@ elif st.session_state["menu_aktif"] == "HUTANG":
                 if status == 0:
                     ada_belum = True
                     with st.container(border=True):
-                        col_txt, col_upl = st.columns([4, 4])
-                        with col_txt:
-                            st.markdown(f"👤 **{dari}** ➡️ wajib transfer ke **{ke}**")
-                            st.markdown(f"### Rp {jml:,.0f}")
-                        with col_upl:
-                            file_foto = st.file_uploader("Pilih/Foto Bukti TF Kamu:", type=["png", "jpg", "jpeg"], key=f"f_{id_h}")
-                            if st.button("Konfirmasi Bayar Lunas", key=f"b_{id_h}", type="primary", use_container_width=True):
-                                if not file_foto:
-                                    st.error("Silakan lampirkan foto bukti transfer terlebih dahulu!")
-                                else:
-                                    with st.spinner("Sedang memproses & mengunggah gambar..."):
-                                        try:
-                                            url_api = "https://api.imgbb.com/1/upload"
-                                            payload = {"key": IMGBB_API_KEY}
-                                            files = {"image": file_foto.getvalue()}
-                                            respons = requests.post(url_api, data=payload, files=files)
-                                            data_json = respons.json()
-                                            
-                                            # PERBAIKAN INDENTASI DI SINI (Diberi spasi masuk agar terbaca Python)
-                                            if data_json["status"] == 200:
-                                                link_gambar_online = data_json["data"]["url"]
-                                                database.update_status(id_h, 1, link_gambar_online)
-                                                st.success("Berhasil dilunasi!")
-                                                st.cache_data.clear()
-                                                st.rerun()
-                                            else:
-                                                st.error("Gagal mengunggah ke cloud. Periksa API Key Imgbb kamu.")
-                                        except Exception as e:
-                                            st.error(f"Terjadi gangguan koneksi: {e}")
+                        # FIX UTAMA: Dibungkus dengan st.form agar file foto dikunci dan tidak hilang saat tombol dipencet
+                        with st.form(key=f"form_upload_{id_h}"):
+                            col_txt, col_upl = st.columns([4, 4])
+                            with col_txt:
+                                st.markdown(f"👤 **{dari}** ➡️ wajib transfer ke **{ke}**")
+                                st.markdown(f"### Rp {jml:,.0f}")
+                            with col_upl:
+                                file_foto = st.file_uploader("Pilih/Foto Bukti TF Kamu:", type=["png", "jpg", "jpeg"], key=f"f_{id_h}")
+                                confirm_btn = st.form_submit_button("Konfirmasi Bayar Lunas", type="primary", use_container_width=True)
+                                
+                                if confirm_btn:
+                                    if not file_foto:
+                                        st.error("Silakan lampirkan foto bukti transfer terlebih dahulu!")
+                                    else:
+                                        with st.spinner("Sedang memproses & mengunggah gambar..."):
+                                            try:
+                                                url_api = "https://api.imgbb.com/1/upload"
+                                                payload = {"key": IMGBB_API_KEY}
+                                                files = {"image": file_foto.getvalue()}
+                                                respons = requests.post(url_api, data=payload, files=files)
+                                                data_json = respons.json()
+                                                
+                                                if data_json.get("status") == 200:
+                                                    link_gambar_online = data_json["data"]["url"]
+                                                    database.update_status(id_h, 1, link_gambar_online)
+                                                    st.success("Berhasil dilunasi!")
+                                                    st.cache_data.clear()
+                                                    st.rerun()
+                                                else:
+                                                    st.error("Gagal mengunggah ke cloud. Periksa API Key Imgbb kamu.")
+                                            except Exception as e:
+                                                st.error(f"Terjadi gangguan koneksi: {e}")
             if not ada_belum:
                 st.success("🎉 Luar biasa! Semua iuran minggu ini sudah impas lunas.")
 
@@ -247,10 +250,6 @@ elif st.session_state["menu_aktif"] == "RIWAYAT":
         st.download_button(label="🟢 Download Excel (.xlsx)", data=buffer.getvalue(), file_name="Laporan_Kas.xlsx", mime="application/vnd.ms-excel")
         st.divider()
 
-        st.subheader("📝 Semua Riwayat Nota Masuk")
-        st.dataframe(df_riwayat[["id", "tanggal", "barang", "nominal", "dibayar_oleh"]], use_container_width=True, hide_index=True)
-        
-        st.divider()
         st.subheader("🗑️ Zona Hapus Data Salah Input")
         id_target = st.number_input("Masukkan ID Angka Nota yang mau dihapus:", min_value=0, step=1)
         tombol_hapus = st.button("❌ Hapus Permanen Nota Ini", type="primary")
