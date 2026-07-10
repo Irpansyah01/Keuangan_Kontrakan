@@ -2,13 +2,13 @@ import sqlite3
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# MENGGANTI NAMA FILE JADI KONTRAKAN_FINAL AGAR DATABASE YANG RUSAK/KORUP TERBUANG
-DB_PATH = os.path.join(BASE_DIR, "data", "kontrakan_final.db")
+# KITA GANTI JADI KONTRAKAN_BARU.DB AGAR DATABASE YANG BENTROK KEMARIN TERBUANG
+DB_PATH = os.path.join(BASE_DIR, "data", "kontrakan_baru.db")
 
 os.makedirs(os.path.join(BASE_DIR, "data"), exist_ok=True)
 
 def connect():
-    # check_same_thread=False wajib di Streamlit agar database tidak bentrok antar-user/halaman
+    # check_same_thread=False wajib di Streamlit agar tidak bentrok saat diakses HP bersamaan
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 def create_table():
@@ -24,7 +24,7 @@ def create_table():
                 dibayar_oleh TEXT
             )
         ''')
-        # 2. Tabel penyelesaian
+        # 2. Tabel penyelesaian (Struktur bersih tanpa kolom foto)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS penyelesaian_hutang (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
